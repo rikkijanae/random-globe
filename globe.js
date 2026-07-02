@@ -16,18 +16,20 @@ import { feature } from "topojson-client";
 
 const CONFIG = {
   globeRadius: 2,
-  gridSpacingDeg: 2.4,   // spacing between tokens (smaller = denser land)
-  overlap: 1.15,         // token size vs. grid spacing (1 = edge-to-edge)
+  gridSpacingDeg: 2.2,   // spacing between tokens (smaller = denser land)
+  overlap: 1.55,         // token size vs. grid spacing (>1.4 fills the gaps)
   spinSpeed: 0.06,       // radians / second
   tilt: 0.41,            // axial tilt (~23.5°)
-  tokenColor: "#1b2130", // coin color (SVGs are recolored to this)
 
-  // Glitter: each coin oscillates between a faint floor and a peak, with
-  // its own range, phase and speed so most sit greyed-out while a shifting
-  // handful rise toward full strength.
-  twinkleSpeed: 2.2,     // overall shimmer speed
-  floorOpacity: [0.08, 0.28], // per-coin faint floor is picked in this range
-  peakOpacity: [0.45, 1.0],   // per-coin peak is picked in this range
+  // Glitter: coins stay fully opaque (so the land never shows holes) and
+  // instead shimmer in BRIGHTNESS between a light-grey and a dark shade.
+  // Each coin swings within its own range, phase and speed, biased light
+  // so most sit greyed-out while a shifting handful darken.
+  glitterLight: 0xc4c9d1, // faint end of a coin's swing
+  glitterDark: 0x171c27,  // strong end of a coin's swing
+  twinkleSpeed: 2.2,      // overall shimmer speed
+  floorRange: [0.0, 0.35], // per-coin low end of the swing (0 = fully light)
+  peakRange: [0.6, 1.0],   // per-coin high end of the swing (1 = fully dark)
 
   // Faint grey outline drawn at the globe's silhouette.
   strokeColor: 0x9aa0ab,
@@ -158,7 +160,8 @@ Promise.all([
     TOKENS.map((u) =>
       fetch(u)
         .then((r) => r.text())
-        .then((t) => svgToTexture(t, CONFIG.tokenColor))
+        // rasterize white; per-coin brightness is set via material.color
+        .then((t) => svgToTexture(t, "#ffffff"))
     )
   ),
   fetch(LAND_URL).then((r) => r.json()),
@@ -172,7 +175,22 @@ Promise.all([
   });
 
 const PLANE = new THREE.PlaneGeometry(1, 1);
-const Z = new THREE.Vector3(0, 0, 1);
+const NORTH = new THREE.Vector3(0, 1, 0); // globe's pole (local space)
+const _up = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _basis = new THREE.Matrix4();
+
+// Orient a coin so it lies flat on the sphere (its normal points radially
+// out) AND its "up" points toward the north pole — so the symbol stands
+// upright and stays upright as the globe spins on its axis.
+function orientUpright(mesh, dir) {
+  _up.copy(NORTH).addScaledVector(dir, -NORTH.dot(dir)); // north on tangent plane
+  if (_up.lengthSq() < 1e-6) _up.set(0, 0, 1); // at the poles, pick any up
+  _up.normalize();
+  _right.crossVectors(_up, dir).normalize();
+  _basis.makeBasis(_right, _up, dir); // x=right, y=up, z=outward normal
+  mesh.quaternion.setFromRotationMatrix(_basis);
+}
 
 function buildTokens(textures, land) {
   const pts = landPoints(land);
@@ -186,20 +204,19 @@ function buildTokens(textures, land) {
 
     const material = new THREE.MeshBasicMaterial({
       map: tex,
-      transparent: true,
+      transparent: true, // for the symbol cut-outs; the disc stays opaque
       depthWrite: false, // far side is handled by culling + the core sphere
       side: THREE.FrontSide,
-      opacity: 1,
     });
 
     const mesh = new THREE.Mesh(PLANE, material);
     mesh.position.copy(dir).multiplyScalar(CONFIG.globeRadius);
-    mesh.quaternion.setFromUnitVectors(Z, dir); // lie flat on the surface
+    orientUpright(mesh, dir);
     mesh.scale.set(tokenScale, tokenScale, 1);
     globe.add(mesh);
 
-    const [fl0, fl1] = CONFIG.floorOpacity;
-    const [pk0, pk1] = CONFIG.peakOpacity;
+    const [fl0, fl1] = CONFIG.floorRange;
+    const [pk0, pk1] = CONFIG.peakRange;
     tokenData.push({
       material,
       floor: fl0 + Math.random() * (fl1 - fl0),
@@ -215,6 +232,8 @@ function buildTokens(textures, land) {
 }
 
 const SPIN_AXIS = new THREE.Vector3(0, 1, 0);
+const C_LIGHT = new THREE.Color(CONFIG.glitterLight);
+const C_DARK = new THREE.Color(CONFIG.glitterDark);
 
 function animate() {
   requestAnimationFrame(animate);
@@ -224,12 +243,13 @@ function animate() {
   globe.rotateOnAxis(SPIN_AXIS, CONFIG.spinSpeed * delta);
 
   for (const tok of tokenData) {
-    // 0..1 wave, biased low so coins spend most of the time faint/grey.
+    // 0..1 wave, biased low so coins spend most of the time light/grey.
     const s = Math.pow(
       0.5 + 0.5 * Math.sin(t * CONFIG.twinkleSpeed * tok.rate + tok.phase),
       1.6
     );
-    tok.material.opacity = tok.floor + (tok.peak - tok.floor) * s;
+    const v = tok.floor + (tok.peak - tok.floor) * s; // 0 = light, 1 = dark
+    tok.material.color.copy(C_LIGHT).lerp(C_DARK, v);
   }
 
   renderer.render(scene, camera);

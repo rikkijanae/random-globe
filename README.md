@@ -6,10 +6,12 @@ the coins fill in the shapes of the continents and countries. The globe body
 itself is white (invisible against the page), so only the coin-continents show.
 
 Every token is the same size and lies flat **on** the sphere surface (tangent
-to it), so the coins follow the globe's curvature and fold away at the edges
-instead of sticking out as flat cards. Coins are crisp vector **SVGs**,
-rasterized in the browser and recolored via `CONFIG.tokenColor`. Each glitters
-with a subtle per-token twinkle as the globe spins.
+to it), oriented so its symbol stays **upright** (up toward the north pole), so
+the coins follow the globe's curvature and fold away at the edges instead of
+sticking out as flat cards. They overlap enough to fill each land area with no
+holes. Coins are crisp vector **SVGs**, rasterized in the browser. Each glitters
+by shimmering in brightness (light-grey ↔ dark) while staying opaque, so the
+land never shows through.
 
 ## How the land is built
 
@@ -51,11 +53,11 @@ All the knobs live in the `CONFIG` object at the top of `globe.js`:
 | ---------------- | ----------------------------------------------------- |
 | `gridSpacingDeg` | spacing between tokens — smaller = denser, more detail |
 | `overlap`        | token size vs. spacing (1 = edge-to-edge)             |
-| `tokenColor`     | coin color (the SVGs are recolored to this)           |
 | `spinSpeed`      | rotation speed                                        |
 | `tilt`           | axial tilt of the globe                               |
+| `glitterLight` / `glitterDark` | the two shades a coin shimmers between (coins stay opaque, so no holes) |
 | `twinkleSpeed`   | glitter shimmer speed                                 |
-| `floorOpacity` / `peakOpacity` | per-coin faint/peak opacity ranges — most coins sit near the floor and rise toward the peak |
+| `floorRange` / `peakRange` | per-coin brightness swing — biased light so most coins sit grey and a shifting set darken |
 | `strokeColor` / `strokeOpacity` / `strokeWidth` / `strokeRadiusScale` | the faint grey outline ring |
 
 Token artwork lives in `tokens/` as SVGs — swap them to restyle the coins.
