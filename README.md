@@ -1,13 +1,15 @@
 # Crypto Globe
 
-A slowly-spinning 3D globe on a white background whose **land masses are built
+A slowly-spinning globe on a white background whose **land masses are built
 from crypto tokens** — **BTC, ETH, SOL, USDC, USDT** — packed edge-to-edge so
-the coins fill in the shapes of the continents and countries. The oceans are
-left empty (white).
+the coins fill in the shapes of the continents and countries. The globe body
+itself is white (invisible against the page), so only the coin-continents show.
 
-Every token is the same size. As the globe rotates, each coin darkens as it
-turns toward the viewer and fades toward the limb, with a subtle per-token
-twinkle so the surface gently glitters.
+Every token is the same size and lies flat **on** the sphere surface (tangent
+to it), so the coins follow the globe's curvature and fold away at the edges
+instead of sticking out as flat cards. Coins are crisp vector **SVGs**,
+rasterized in the browser and recolored via `CONFIG.tokenColor`. Each glitters
+with a subtle per-token twinkle as the globe spins.
 
 ## How the land is built
 
@@ -37,8 +39,8 @@ python3 -m http.server 8000
 
 ```
 index.html    markup, white background, import map
-globe.js      land detection + the three.js scene and glitter animation
-tokens/       the five B&W token sprites (exported from Figma)
+globe.js      SVG rasterizing + land detection + the three.js scene
+tokens/       the five B&W token coins as transparent SVGs (from Figma)
 ```
 
 ## Tuning
@@ -49,9 +51,9 @@ All the knobs live in the `CONFIG` object at the top of `globe.js`:
 | ---------------- | ----------------------------------------------------- |
 | `gridSpacingDeg` | spacing between tokens — smaller = denser, more detail |
 | `overlap`        | token size vs. spacing (1 = edge-to-edge)             |
-| `tokenColor`     | tint applied to the light coin art (darker = bolder)  |
+| `tokenColor`     | coin color (the SVGs are recolored to this)           |
 | `spinSpeed`      | rotation speed                                        |
 | `tilt`           | axial tilt of the globe                               |
 | `twinkleSpeed` / `twinkleAmount` | glitter shimmer speed / strength      |
 
-Token artwork lives in `tokens/` — swap the PNGs to restyle the coins.
+Token artwork lives in `tokens/` as SVGs — swap them to restyle the coins.

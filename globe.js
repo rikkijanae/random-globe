@@ -4,36 +4,35 @@ import { feature } from "topojson-client";
 
 /* ------------------------------------------------------------------ *
  * Crypto Globe
- * A slowly-spinning 3D globe whose LAND MASSES are built from crypto
- * tokens (BTC, ETH, SOL, USDC, USDT) packed edge-to-edge. Tokens are
- * placed only where there is land, on an evenly-spaced grid, so the
- * coins fill in the shapes of the continents / countries.
+ * A white globe whose LAND MASSES are built from crypto tokens
+ * (BTC, ETH, SOL, USDC, USDT). Tokens are placed only on land, on an
+ * evenly-spaced grid, and each coin is laid flat ON the sphere surface
+ * (tangent to it) so they follow the globe's curvature and fold away at
+ * the edges instead of sticking out as flat cards.
  *
- * The oceans are left empty (white). Each token glitters gently: it
- * darkens as it rotates toward the viewer and fades toward the limb,
- * with a subtle per-token twinkle so the surface shimmers.
+ * Coins are crisp vector SVGs, rasterized in the browser. Each glitters
+ * gently with a per-token twinkle as the globe slowly spins.
  * ------------------------------------------------------------------ */
 
 const CONFIG = {
   globeRadius: 2,
   gridSpacingDeg: 2.4,   // spacing between tokens (smaller = denser land)
-  overlap: 1.02,         // token size vs. grid spacing (1 = edge-to-edge)
+  overlap: 1.15,         // token size vs. grid spacing (1 = edge-to-edge)
   spinSpeed: 0.06,       // radians / second
   tilt: 0.41,            // axial tilt (~23.5°)
-  tokenColor: 0x272d3a,  // tint applied to the (light) coin art -> dark coins
+  tokenColor: "#1b2130", // coin color (SVGs are recolored to this)
   twinkleSpeed: 1.6,     // shimmer cycle speed
-  twinkleAmount: 0.18,   // how much the shimmer dims a token (0 = off)
+  twinkleAmount: 0.22,   // how much the shimmer dims a token (0 = off)
 };
 
 const TOKENS = [
-  "tokens/btc.png",
-  "tokens/eth.png",
-  "tokens/sol.png",
-  "tokens/usdc.png",
-  "tokens/usdt.png",
+  "tokens/btc.svg",
+  "tokens/eth.svg",
+  "tokens/sol.svg",
+  "tokens/usdc.svg",
+  "tokens/usdt.svg",
 ];
 
-// Low-res world land outline (single multipolygon), fetched from a CDN.
 const LAND_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json";
 
 const canvas = document.getElementById("globe");
@@ -57,11 +56,11 @@ const globe = new THREE.Group();
 globe.rotation.z = CONFIG.tilt;
 scene.add(globe);
 
-// A white sphere just under the tokens. Its only job is to occlude the
-// tokens on the far side, so the globe reads as solid. White = invisible
-// against the white page, so the oceans look empty.
+// A pure-white globe body: invisible against the white page, so only the
+// coin "continents" show. It still occludes the tokens on the far side,
+// so we only ever see the near hemisphere.
 const core = new THREE.Mesh(
-  new THREE.SphereGeometry(CONFIG.globeRadius * 0.99, 64, 64),
+  new THREE.SphereGeometry(CONFIG.globeRadius * 0.99, 96, 96),
   new THREE.MeshBasicMaterial({ color: 0xffffff })
 );
 globe.add(core);
@@ -71,20 +70,17 @@ const tokenData = []; // { material, dir, phase, twinkleRate }
 
 /* --- lat/lon -> position on the sphere ---------------------------- */
 const DEG = Math.PI / 180;
-function latLonToVec3(lat, lon, radius) {
-  const phi = (90 - lat) * DEG;   // polar angle from +Y
-  const theta = (lon + 180) * DEG; // azimuth
+function latLonDir(lat, lon) {
+  const phi = (90 - lat) * DEG;
+  const theta = (lon + 180) * DEG;
   return new THREE.Vector3(
-    radius * Math.sin(phi) * Math.cos(theta),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.sin(theta)
+    Math.sin(phi) * Math.cos(theta),
+    Math.cos(phi),
+    Math.sin(phi) * Math.sin(theta)
   );
 }
 
-/* --- build an evenly-spaced grid of land points ------------------- *
- * Step latitude uniformly; widen the longitude step by 1/cos(lat) so
- * points stay ~equally spaced on the sphere (no bunching at the poles).
- * Keep only points that fall on land.                                */
+/* --- evenly-spaced grid of land points ---------------------------- */
 function landPoints(landFeature) {
   const pts = [];
   const dLat = CONFIG.gridSpacingDeg;
@@ -98,63 +94,79 @@ function landPoints(landFeature) {
   return pts;
 }
 
+/* --- rasterize an SVG string into a crisp texture ----------------- */
+function svgToTexture(svgText, color, size = 256) {
+  const colored = svgText.replaceAll("#000000", color);
+  const url =
+    "data:image/svg+xml;charset=utf-8," + encodeURIComponent(colored);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = c.height = size;
+      const ctx = c.getContext("2d");
+      const ar = (img.width || 1) / (img.height || 1);
+      let w = size, h = size;
+      if (ar > 1) h = size / ar;
+      else w = size * ar;
+      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      resolve(tex);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
 Promise.all([
-  Promise.all(TOKENS.map(loadTexture)),
+  Promise.all(
+    TOKENS.map((u) =>
+      fetch(u)
+        .then((r) => r.text())
+        .then((t) => svgToTexture(t, CONFIG.tokenColor))
+    )
+  ),
   fetch(LAND_URL).then((r) => r.json()),
 ])
   .then(([textures, topo]) => {
-    const land = feature(topo, topo.objects.land);
-    buildTokens(textures, land);
+    buildTokens(textures, feature(topo, topo.objects.land));
   })
   .catch((err) => {
     console.error("Failed to build globe", err);
     loadingEl.textContent = "Failed to load";
   });
 
-function loadTexture(url) {
-  return new Promise((resolve, reject) => {
-    new THREE.TextureLoader().load(
-      url,
-      (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        resolve(tex);
-      },
-      undefined,
-      reject
-    );
-  });
-}
+const PLANE = new THREE.PlaneGeometry(1, 1);
+const Z = new THREE.Vector3(0, 0, 1);
 
 function buildTokens(textures, land) {
   const pts = landPoints(land);
 
-  // Uniform token size: match the grid spacing (in world units) so the
-  // coins sit edge-to-edge and fill each land area.
   const arc = CONFIG.globeRadius * CONFIG.gridSpacingDeg * DEG;
   const tokenScale = arc * CONFIG.overlap;
-  const tint = new THREE.Color(CONFIG.tokenColor);
 
   for (const [lat, lon] of pts) {
-    const pos = latLonToVec3(lat, lon, CONFIG.globeRadius * 1.005);
+    const dir = latLonDir(lat, lon);
     const tex = textures[(Math.random() * textures.length) | 0];
 
-    const material = new THREE.SpriteMaterial({
+    const material = new THREE.MeshBasicMaterial({
       map: tex,
-      color: tint,
       transparent: true,
-      depthTest: true,   // far-side tokens are occluded by the core sphere
-      depthWrite: false,
-      opacity: 0,
+      depthWrite: false, // far side is handled by culling + the core sphere
+      side: THREE.FrontSide,
+      opacity: 1,
     });
 
-    const sprite = new THREE.Sprite(material);
-    sprite.position.copy(pos);
-    sprite.scale.setScalar(tokenScale);
-    globe.add(sprite);
+    const mesh = new THREE.Mesh(PLANE, material);
+    mesh.position.copy(dir).multiplyScalar(CONFIG.globeRadius);
+    mesh.quaternion.setFromUnitVectors(Z, dir); // lie flat on the surface
+    mesh.scale.set(tokenScale, tokenScale, 1);
+    globe.add(mesh);
 
     tokenData.push({
       material,
-      dir: pos.clone().normalize(),
       phase: Math.random() * Math.PI * 2,
       twinkleRate: 0.6 + Math.random() * 0.9,
     });
@@ -166,7 +178,6 @@ function buildTokens(textures, land) {
 }
 
 const SPIN_AXIS = new THREE.Vector3(0, 1, 0);
-const worldDir = new THREE.Vector3();
 
 function animate() {
   requestAnimationFrame(animate);
@@ -176,17 +187,9 @@ function animate() {
   globe.rotateOnAxis(SPIN_AXIS, CONFIG.spinSpeed * delta);
 
   for (const tok of tokenData) {
-    worldDir.copy(tok.dir).applyQuaternion(globe.quaternion);
-
-    // Facing the camera (+z) => full strength; toward the limb => fade.
-    const facing = THREE.MathUtils.smoothstep(worldDir.z, -0.05, 0.55);
-
-    // Gentle per-token twinkle so the land shimmers without flickering.
-    const twinkle =
+    tok.material.opacity =
       1 - CONFIG.twinkleAmount *
         (0.5 + 0.5 * Math.sin(t * CONFIG.twinkleSpeed * tok.twinkleRate + tok.phase));
-
-    tok.material.opacity = facing * twinkle;
   }
 
   renderer.render(scene, camera);
