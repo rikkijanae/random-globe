@@ -17,6 +17,9 @@ A finer layer of plain **circle dots** (a single GPU points layer) blinks in and
 out behind the coins — filling the gaps between them and standing in for small
 islands the coin grid is too coarse to capture.
 
+**Hover** the globe and the coins near the cursor tint blue with a soft falloff,
+fading back to their normal shade as you move away. **Drag** to rotate it.
+
 ## How the land is built
 
 - An even grid of points is walked across the sphere (longitude step widened by
@@ -65,5 +68,6 @@ All the knobs live in the `CONFIG` object at the top of `globe.js`:
 | `strokeColor` / `strokeOpacity` / `strokeWidth` / `strokeRadiusScale` | the faint grey outline ring |
 | `dotSpacingDeg` | grid for the blinking filler dots — smaller = more dots / more small islands |
 | `dotColor` / `dotSize` / `dotBlinkSpeed` | color, size and blink speed of the filler dots |
+| `hoverColor` / `hoverInnerDeg` / `hoverOuterDeg` | color and radius of the blue hover highlight |
 
 Token artwork lives in `tokens/` as SVGs — swap them to restyle the coins.

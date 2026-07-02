@@ -43,6 +43,11 @@ const CONFIG = {
   dotColor: 0x9aa0ab,   // dot color
   dotSize: 26,          // dot size (screen px at the front of the globe)
   dotBlinkSpeed: 1.8,   // how fast dots blink
+
+  // Hover: coins near the cursor tint blue, then fade back when you leave.
+  hoverColor: 0x2f6bff,
+  hoverInnerDeg: 1.0,   // fully blue within this radius of the cursor
+  hoverOuterDeg: 3.4,   // blend back to normal by this radius
 };
 
 const TOKENS = [
@@ -226,6 +231,7 @@ function buildTokens(textures, land) {
     const [pk0, pk1] = CONFIG.peakRange;
     tokenData.push({
       material,
+      dir: dir.clone(), // local unit direction, used for hover hit-testing
       floor: fl0 + Math.random() * (fl1 - fl0),
       peak: pk0 + Math.random() * (pk1 - pk0),
       phase: Math.random() * Math.PI * 2,
@@ -314,12 +320,29 @@ const WORLD_X = new THREE.Vector3(1, 0, 0);
 const WORLD_Y = new THREE.Vector3(0, 1, 0);
 const C_LIGHT = new THREE.Color(CONFIG.glitterLight);
 const C_DARK = new THREE.Color(CONFIG.glitterDark);
+const C_HOVER = new THREE.Color(CONFIG.hoverColor);
+const COS_INNER = Math.cos(CONFIG.hoverInnerDeg * Math.PI / 180);
+const COS_OUTER = Math.cos(CONFIG.hoverOuterDeg * Math.PI / 180);
+const _color = new THREE.Color();
+const hoverDir = new THREE.Vector3();
+let hoverActive = false;
 
-/* --- drag to rotate ----------------------------------------------- */
+/* --- drag to rotate + hover to highlight -------------------------- */
 let dragging = false;
 let lastX = 0;
 let lastY = 0;
 const DRAG_SPEED = 0.006;
+
+const raycaster = new THREE.Raycaster();
+const pointerNDC = new THREE.Vector2();
+let pointerInside = false;
+
+function updatePointer(e) {
+  const r = canvas.getBoundingClientRect();
+  pointerNDC.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+  pointerNDC.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+  pointerInside = true;
+}
 
 canvas.style.cursor = "grab";
 canvas.addEventListener("pointerdown", (e) => {
@@ -330,6 +353,7 @@ canvas.addEventListener("pointerdown", (e) => {
   canvas.setPointerCapture(e.pointerId);
 });
 canvas.addEventListener("pointermove", (e) => {
+  updatePointer(e);
   if (!dragging) return;
   const dx = e.clientX - lastX;
   const dy = e.clientY - lastY;
@@ -338,6 +362,9 @@ canvas.addEventListener("pointermove", (e) => {
   // Rotate about world axes so the drag feels natural at any orientation.
   globe.rotateOnWorldAxis(WORLD_Y, dx * DRAG_SPEED);
   globe.rotateOnWorldAxis(WORLD_X, dy * DRAG_SPEED);
+});
+canvas.addEventListener("pointerleave", () => {
+  pointerInside = false;
 });
 function endDrag() {
   dragging = false;
@@ -354,6 +381,17 @@ function animate() {
   // Auto-spin on the polar axis, paused while the user is dragging.
   if (!dragging) globe.rotateOnAxis(SPIN_AXIS, CONFIG.spinSpeed * delta);
 
+  // Where is the cursor on the globe? (local direction on the sphere)
+  hoverActive = false;
+  if (pointerInside && !dragging && tokenData.length) {
+    raycaster.setFromCamera(pointerNDC, camera);
+    const hit = raycaster.intersectObject(core, false)[0];
+    if (hit) {
+      globe.worldToLocal(hoverDir.copy(hit.point)).normalize();
+      hoverActive = true;
+    }
+  }
+
   for (const tok of tokenData) {
     // 0..1 wave, biased low so coins spend most of the time light/grey.
     const s = Math.pow(
@@ -361,7 +399,16 @@ function animate() {
       1.6
     );
     const v = tok.floor + (tok.peak - tok.floor) * s; // 0 = light, 1 = dark
-    tok.material.color.copy(C_LIGHT).lerp(C_DARK, v);
+    _color.copy(C_LIGHT).lerp(C_DARK, v);
+
+    // Tint blue near the cursor, fading out with distance.
+    if (hoverActive) {
+      const d = tok.dir.dot(hoverDir); // 1 = right under the cursor
+      if (d > COS_OUTER) {
+        _color.lerp(C_HOVER, THREE.MathUtils.smoothstep(d, COS_OUTER, COS_INNER));
+      }
+    }
+    tok.material.color.copy(_color);
   }
 
   if (dotMaterial) dotMaterial.uniforms.uTime.value = t;
