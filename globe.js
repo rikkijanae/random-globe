@@ -16,8 +16,8 @@ import { feature } from "topojson-client";
 
 const CONFIG = {
   globeRadius: 2,
-  gridSpacingDeg: 2.2,   // spacing between tokens (smaller = denser land)
-  overlap: 1.55,         // token size vs. grid spacing (>1.4 fills the gaps)
+  gridSpacingDeg: 1.7,   // spacing between tokens (smaller = denser, finer shapes)
+  overlap: 1.0,          // token size vs. grid spacing (1 = side by side, no overlap)
   spinSpeed: 0.06,       // radians / second
   tilt: 0.41,            // axial tilt (~23.5°)
 
