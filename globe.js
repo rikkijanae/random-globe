@@ -21,15 +21,13 @@ const CONFIG = {
   spinSpeed: 0.06,       // radians / second
   tilt: 0.41,            // axial tilt (~23.5°)
 
-  // Glitter: coins stay fully opaque (so the land never shows holes) and
-  // instead shimmer in BRIGHTNESS between a light-grey and a dark shade.
-  // Each coin swings within its own range, phase and speed, biased light
-  // so most sit greyed-out while a shifting handful darken.
-  glitterLight: 0xc4c9d1, // faint end of a coin's swing
-  glitterDark: 0x171c27,  // strong end of a coin's swing
-  twinkleSpeed: 2.2,      // overall shimmer speed
-  floorRange: [0.0, 0.35], // per-coin low end of the swing (0 = fully light)
-  peakRange: [0.6, 1.0],   // per-coin high end of the swing (1 = fully dark)
+  // Glitter: coins are a single shade kept translucent (max 50% opacity) so
+  // they always read light, and shimmer by fading between a faint floor and
+  // that 50% peak — each with its own range, phase and speed.
+  coinColor: 0x1b2130,     // coin shade (stays light because it's translucent)
+  twinkleSpeed: 2.2,       // overall shimmer speed
+  floorOpacity: [0.1, 0.22], // per-coin faint end of the swing
+  peakOpacity: [0.32, 0.5],  // per-coin bright end (0.5 = never darker than 50%)
 
   // Faint grey outline drawn at the globe's silhouette.
   strokeColor: 0x9aa0ab,
@@ -43,6 +41,7 @@ const CONFIG = {
   dotColor: 0x9aa0ab,   // dot color
   dotSize: 26,          // dot size (screen px at the front of the globe)
   dotBlinkSpeed: 1.8,   // how fast dots blink
+  dotMaxOpacity: 0.5,   // dots never exceed 50% opacity either
 
   // Hover: coins near the cursor tint blue, then fade back when you leave.
   hoverColor: 0x2f6bff,
@@ -227,8 +226,8 @@ function buildTokens(textures, land) {
     mesh.scale.set(tokenScale, tokenScale, 1);
     globe.add(mesh);
 
-    const [fl0, fl1] = CONFIG.floorRange;
-    const [pk0, pk1] = CONFIG.peakRange;
+    const [fl0, fl1] = CONFIG.floorOpacity;
+    const [pk0, pk1] = CONFIG.peakOpacity;
     tokenData.push({
       material,
       dir: dir.clone(), // local unit direction, used for hover hit-testing
@@ -281,6 +280,7 @@ function buildDots(land) {
       uSize: { value: CONFIG.dotSize },
       uPixelRatio: { value: renderer.getPixelRatio() },
       uSpeed: { value: CONFIG.dotBlinkSpeed },
+      uMaxAlpha: { value: CONFIG.dotMaxOpacity },
     },
     vertexShader: `
       attribute float aPhase;
@@ -289,13 +289,14 @@ function buildDots(land) {
       uniform float uSize;
       uniform float uPixelRatio;
       uniform float uSpeed;
+      uniform float uMaxAlpha;
       varying float vAlpha;
       void main() {
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         gl_Position = projectionMatrix * mv;
         gl_PointSize = uSize * uPixelRatio / -mv.z;
         float b = 0.5 + 0.5 * sin(uTime * uSpeed * aSpeed + aPhase);
-        vAlpha = smoothstep(0.2, 0.95, b); // blink fully in and out
+        vAlpha = smoothstep(0.2, 0.95, b) * uMaxAlpha; // blink, capped at max
       }`,
     fragmentShader: `
       uniform vec3 uColor;
@@ -318,8 +319,7 @@ function buildDots(land) {
 const SPIN_AXIS = new THREE.Vector3(0, 1, 0);
 const WORLD_X = new THREE.Vector3(1, 0, 0);
 const WORLD_Y = new THREE.Vector3(0, 1, 0);
-const C_LIGHT = new THREE.Color(CONFIG.glitterLight);
-const C_DARK = new THREE.Color(CONFIG.glitterDark);
+const C_COIN = new THREE.Color(CONFIG.coinColor);
 const C_HOVER = new THREE.Color(CONFIG.hoverColor);
 const COS_INNER = Math.cos(CONFIG.hoverInnerDeg * Math.PI / 180);
 const COS_OUTER = Math.cos(CONFIG.hoverOuterDeg * Math.PI / 180);
@@ -393,15 +393,15 @@ function animate() {
   }
 
   for (const tok of tokenData) {
-    // 0..1 wave, biased low so coins spend most of the time light/grey.
+    // 0..1 wave, biased low so coins spend most of the time faint.
     const s = Math.pow(
       0.5 + 0.5 * Math.sin(t * CONFIG.twinkleSpeed * tok.rate + tok.phase),
       1.6
     );
-    const v = tok.floor + (tok.peak - tok.floor) * s; // 0 = light, 1 = dark
-    _color.copy(C_LIGHT).lerp(C_DARK, v);
+    tok.material.opacity = tok.floor + (tok.peak - tok.floor) * s; // <= 0.5
 
-    // Tint blue near the cursor, fading out with distance.
+    // Coins are a single shade; tint blue near the cursor, fading with distance.
+    _color.copy(C_COIN);
     if (hoverActive) {
       const d = tok.dir.dot(hoverDir); // 1 = right under the cursor
       if (d > COS_OUTER) {

@@ -9,9 +9,9 @@ Every token is the same size and lies flat **on** the sphere surface (tangent
 to it), oriented so its symbol stays **upright** (up toward the north pole), so
 the coins follow the globe's curvature and fold away at the edges instead of
 sticking out as flat cards. They overlap enough to fill each land area with no
-holes. Coins are crisp vector **SVGs**, rasterized in the browser. Each glitters
-by shimmering in brightness (light-grey ↔ dark) while staying opaque, so the
-land never shows through.
+holes. Coins are crisp vector **SVGs**, rasterized in the browser. They're kept
+translucent (max 50% opacity) so they always read light, and glitter by fading
+between a faint floor and that 50% peak — each coin at its own pace.
 
 A finer layer of plain **circle dots** (a single GPU points layer) blinks in and
 out behind the coins — filling the gaps between them and standing in for small
@@ -62,12 +62,12 @@ All the knobs live in the `CONFIG` object at the top of `globe.js`:
 | `overlap`        | token size vs. spacing (1 = edge-to-edge)             |
 | `spinSpeed`      | rotation speed                                        |
 | `tilt`           | axial tilt of the globe                               |
-| `glitterLight` / `glitterDark` | the two shades a coin shimmers between (coins stay opaque, so no holes) |
+| `coinColor`      | coin shade (kept translucent, so it reads light)      |
 | `twinkleSpeed`   | glitter shimmer speed                                 |
-| `floorRange` / `peakRange` | per-coin brightness swing — biased light so most coins sit grey and a shifting set darken |
+| `floorOpacity` / `peakOpacity` | per-coin opacity swing (peak capped at 0.5 = never darker than 50%) |
 | `strokeColor` / `strokeOpacity` / `strokeWidth` / `strokeRadiusScale` | the faint grey outline ring |
 | `dotSpacingDeg` | grid for the blinking filler dots — smaller = more dots / more small islands |
-| `dotColor` / `dotSize` / `dotBlinkSpeed` | color, size and blink speed of the filler dots |
+| `dotColor` / `dotSize` / `dotBlinkSpeed` / `dotMaxOpacity` | color, size, blink speed and max opacity of the filler dots |
 | `hoverColor` / `hoverInnerDeg` / `hoverOuterDeg` | color and radius of the blue hover highlight |
 
 Token artwork lives in `tokens/` as SVGs — swap them to restyle the coins.
