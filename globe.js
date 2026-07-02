@@ -232,15 +232,49 @@ function buildTokens(textures, land) {
 }
 
 const SPIN_AXIS = new THREE.Vector3(0, 1, 0);
+const WORLD_X = new THREE.Vector3(1, 0, 0);
+const WORLD_Y = new THREE.Vector3(0, 1, 0);
 const C_LIGHT = new THREE.Color(CONFIG.glitterLight);
 const C_DARK = new THREE.Color(CONFIG.glitterDark);
+
+/* --- drag to rotate ----------------------------------------------- */
+let dragging = false;
+let lastX = 0;
+let lastY = 0;
+const DRAG_SPEED = 0.006;
+
+canvas.style.cursor = "grab";
+canvas.addEventListener("pointerdown", (e) => {
+  dragging = true;
+  lastX = e.clientX;
+  lastY = e.clientY;
+  canvas.style.cursor = "grabbing";
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener("pointermove", (e) => {
+  if (!dragging) return;
+  const dx = e.clientX - lastX;
+  const dy = e.clientY - lastY;
+  lastX = e.clientX;
+  lastY = e.clientY;
+  // Rotate about world axes so the drag feels natural at any orientation.
+  globe.rotateOnWorldAxis(WORLD_Y, dx * DRAG_SPEED);
+  globe.rotateOnWorldAxis(WORLD_X, dy * DRAG_SPEED);
+});
+function endDrag() {
+  dragging = false;
+  canvas.style.cursor = "grab";
+}
+canvas.addEventListener("pointerup", endDrag);
+canvas.addEventListener("pointercancel", endDrag);
 
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
   const t = clock.elapsedTime;
 
-  globe.rotateOnAxis(SPIN_AXIS, CONFIG.spinSpeed * delta);
+  // Auto-spin on the polar axis, paused while the user is dragging.
+  if (!dragging) globe.rotateOnAxis(SPIN_AXIS, CONFIG.spinSpeed * delta);
 
   for (const tok of tokenData) {
     // 0..1 wave, biased low so coins spend most of the time light/grey.
