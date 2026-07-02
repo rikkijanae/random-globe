@@ -35,7 +35,7 @@ const CONFIG = {
   strokeColor: 0x9aa0ab,
   strokeOpacity: 0.75,
   strokeRadiusScale: 1.045, // where the stroke sits relative to the globe
-  strokeWidth: 0.012,       // stroke thickness in world units
+  strokeWidth: 0.006,       // stroke thickness in world units
 };
 
 const TOKENS = [
