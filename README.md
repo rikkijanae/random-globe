@@ -13,6 +13,10 @@ holes. Coins are crisp vector **SVGs**, rasterized in the browser. Each glitters
 by shimmering in brightness (light-grey ↔ dark) while staying opaque, so the
 land never shows through.
 
+A finer layer of plain **circle dots** (a single GPU points layer) blinks in and
+out behind the coins — filling the gaps between them and standing in for small
+islands the coin grid is too coarse to capture.
+
 ## How the land is built
 
 - An even grid of points is walked across the sphere (longitude step widened by
@@ -59,5 +63,7 @@ All the knobs live in the `CONFIG` object at the top of `globe.js`:
 | `twinkleSpeed`   | glitter shimmer speed                                 |
 | `floorRange` / `peakRange` | per-coin brightness swing — biased light so most coins sit grey and a shifting set darken |
 | `strokeColor` / `strokeOpacity` / `strokeWidth` / `strokeRadiusScale` | the faint grey outline ring |
+| `dotSpacingDeg` | grid for the blinking filler dots — smaller = more dots / more small islands |
+| `dotColor` / `dotSize` / `dotBlinkSpeed` | color, size and blink speed of the filler dots |
 
 Token artwork lives in `tokens/` as SVGs — swap them to restyle the coins.

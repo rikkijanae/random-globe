@@ -36,6 +36,13 @@ const CONFIG = {
   strokeOpacity: 0.75,
   strokeRadiusScale: 1.045, // where the stroke sits relative to the globe
   strokeWidth: 0.006,       // stroke thickness in world units
+
+  // Filler dots: plain circles on a finer land grid that blink in and out,
+  // filling the gaps between coins and standing in for small islands.
+  dotSpacingDeg: 1.0,   // finer than the coins, so dots fall in the gaps
+  dotColor: 0x9aa0ab,   // dot color
+  dotSize: 26,          // dot size (screen px at the front of the globe)
+  dotBlinkSpeed: 1.8,   // how fast dots blink
 };
 
 const TOKENS = [
@@ -226,9 +233,80 @@ function buildTokens(textures, land) {
     });
   }
 
+  buildDots(land);
+
   console.log(`Placed ${pts.length} tokens on land`);
   loadingEl.classList.add("hidden");
   animate();
+}
+
+/* --- blinking filler dots (one GPU points layer) ------------------ */
+let dotMaterial = null;
+
+function buildDots(land) {
+  const dLat = CONFIG.dotSpacingDeg;
+  const positions = [];
+  const phases = [];
+  const speeds = [];
+  for (let lat = -84; lat <= 84; lat += dLat) {
+    const cos = Math.cos(lat * DEG);
+    const dLon = dLat / Math.max(cos, 0.12);
+    for (let lon = -180; lon < 180; lon += dLon) {
+      if (!geoContains(land, [lon, lat])) continue;
+      const p = latLonDir(lat, lon).multiplyScalar(CONFIG.globeRadius);
+      positions.push(p.x, p.y, p.z);
+      phases.push(Math.random() * Math.PI * 2);
+      speeds.push(0.5 + Math.random());
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute("aPhase", new THREE.Float32BufferAttribute(phases, 1));
+  geo.setAttribute("aSpeed", new THREE.Float32BufferAttribute(speeds, 1));
+
+  dotMaterial = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    depthTest: true, // far-side dots are hidden by the core sphere
+    uniforms: {
+      uTime: { value: 0 },
+      uColor: { value: new THREE.Color(CONFIG.dotColor) },
+      uSize: { value: CONFIG.dotSize },
+      uPixelRatio: { value: renderer.getPixelRatio() },
+      uSpeed: { value: CONFIG.dotBlinkSpeed },
+    },
+    vertexShader: `
+      attribute float aPhase;
+      attribute float aSpeed;
+      uniform float uTime;
+      uniform float uSize;
+      uniform float uPixelRatio;
+      uniform float uSpeed;
+      varying float vAlpha;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = uSize * uPixelRatio / -mv.z;
+        float b = 0.5 + 0.5 * sin(uTime * uSpeed * aSpeed + aPhase);
+        vAlpha = smoothstep(0.2, 0.95, b); // blink fully in and out
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor;
+      varying float vAlpha;
+      void main() {
+        vec2 d = gl_PointCoord - vec2(0.5);
+        float r = dot(d, d);
+        if (r > 0.25) discard;                  // round dot
+        float edge = smoothstep(0.25, 0.16, r); // soft edge
+        gl_FragColor = vec4(uColor, vAlpha * edge);
+      }`,
+  });
+
+  const dots = new THREE.Points(geo, dotMaterial);
+  dots.renderOrder = -1; // draw behind the coins so they only show in gaps
+  globe.add(dots);
+  console.log(`Placed ${phases.length} filler dots`);
 }
 
 const SPIN_AXIS = new THREE.Vector3(0, 1, 0);
@@ -285,6 +363,8 @@ function animate() {
     const v = tok.floor + (tok.peak - tok.floor) * s; // 0 = light, 1 = dark
     tok.material.color.copy(C_LIGHT).lerp(C_DARK, v);
   }
+
+  if (dotMaterial) dotMaterial.uniforms.uTime.value = t;
 
   renderer.render(scene, camera);
 }
