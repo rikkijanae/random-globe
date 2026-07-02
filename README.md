@@ -54,6 +54,8 @@ All the knobs live in the `CONFIG` object at the top of `globe.js`:
 | `tokenColor`     | coin color (the SVGs are recolored to this)           |
 | `spinSpeed`      | rotation speed                                        |
 | `tilt`           | axial tilt of the globe                               |
-| `twinkleSpeed` / `twinkleAmount` | glitter shimmer speed / strength      |
+| `twinkleSpeed`   | glitter shimmer speed                                 |
+| `floorOpacity` / `peakOpacity` | per-coin faint/peak opacity ranges — most coins sit near the floor and rise toward the peak |
+| `strokeColor` / `strokeOpacity` / `strokeWidth` / `strokeRadiusScale` | the faint grey outline ring |
 
 Token artwork lives in `tokens/` as SVGs — swap them to restyle the coins.

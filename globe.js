@@ -21,8 +21,19 @@ const CONFIG = {
   spinSpeed: 0.06,       // radians / second
   tilt: 0.41,            // axial tilt (~23.5°)
   tokenColor: "#1b2130", // coin color (SVGs are recolored to this)
-  twinkleSpeed: 1.6,     // shimmer cycle speed
-  twinkleAmount: 0.22,   // how much the shimmer dims a token (0 = off)
+
+  // Glitter: each coin oscillates between a faint floor and a peak, with
+  // its own range, phase and speed so most sit greyed-out while a shifting
+  // handful rise toward full strength.
+  twinkleSpeed: 2.2,     // overall shimmer speed
+  floorOpacity: [0.08, 0.28], // per-coin faint floor is picked in this range
+  peakOpacity: [0.45, 1.0],   // per-coin peak is picked in this range
+
+  // Faint grey outline drawn at the globe's silhouette.
+  strokeColor: 0x9aa0ab,
+  strokeOpacity: 0.75,
+  strokeRadiusScale: 1.045, // where the stroke sits relative to the globe
+  strokeWidth: 0.012,       // stroke thickness in world units
 };
 
 const TOKENS = [
@@ -64,6 +75,28 @@ const core = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ color: 0xffffff })
 );
 globe.add(core);
+
+// Faint grey silhouette stroke — a thin screen-facing ring at the globe's
+// edge. Added to the scene (not the spinning group) so it stays put.
+(function addStroke() {
+  const mid = CONFIG.globeRadius * CONFIG.strokeRadiusScale;
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(
+      mid - CONFIG.strokeWidth / 2,
+      mid + CONFIG.strokeWidth / 2,
+      256
+    ),
+    new THREE.MeshBasicMaterial({
+      color: CONFIG.strokeColor,
+      transparent: true,
+      opacity: CONFIG.strokeOpacity,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      depthTest: false, // draw on top; a z=0 ring would be hidden by the sphere
+    })
+  );
+  scene.add(ring);
+})();
 
 const clock = new THREE.Clock();
 const tokenData = []; // { material, dir, phase, twinkleRate }
@@ -165,10 +198,14 @@ function buildTokens(textures, land) {
     mesh.scale.set(tokenScale, tokenScale, 1);
     globe.add(mesh);
 
+    const [fl0, fl1] = CONFIG.floorOpacity;
+    const [pk0, pk1] = CONFIG.peakOpacity;
     tokenData.push({
       material,
+      floor: fl0 + Math.random() * (fl1 - fl0),
+      peak: pk0 + Math.random() * (pk1 - pk0),
       phase: Math.random() * Math.PI * 2,
-      twinkleRate: 0.6 + Math.random() * 0.9,
+      rate: 0.55 + Math.random() * 1.1, // per-coin speed variation
     });
   }
 
@@ -187,9 +224,12 @@ function animate() {
   globe.rotateOnAxis(SPIN_AXIS, CONFIG.spinSpeed * delta);
 
   for (const tok of tokenData) {
-    tok.material.opacity =
-      1 - CONFIG.twinkleAmount *
-        (0.5 + 0.5 * Math.sin(t * CONFIG.twinkleSpeed * tok.twinkleRate + tok.phase));
+    // 0..1 wave, biased low so coins spend most of the time faint/grey.
+    const s = Math.pow(
+      0.5 + 0.5 * Math.sin(t * CONFIG.twinkleSpeed * tok.rate + tok.phase),
+      1.6
+    );
+    tok.material.opacity = tok.floor + (tok.peak - tok.floor) * s;
   }
 
   renderer.render(scene, camera);
